@@ -181,17 +181,27 @@
 
         .nav-buttons {
             position: absolute;
-            top: 30px;
-            right: 40px;
+            top: 130px; /* 將導覽列移至標題下方 */
+            left: 40px; /* 移至左側 */
             z-index: 10;
             display: flex;
-            gap: 15px;
+            flex-direction: column; /* 改為垂直排列 */
+            gap: 12px;
+            max-height: calc(100vh - 180px); /* 避免超出螢幕，可捲動 */
+            overflow-y: auto;
+            padding-right: 15px;
         }
+
+        /* 導覽列的隱形捲軸 */
+        .nav-buttons::-webkit-scrollbar { width: 4px; }
+        .nav-buttons::-webkit-scrollbar-track { background: transparent; }
+        .nav-buttons::-webkit-scrollbar-thumb { background: rgba(0, 243, 255, 0.3); border-radius: 4px; }
+
         .nav-buttons button {
             background: rgba(10, 15, 30, 0.7);
             border: 1px solid var(--primary-glow);
             color: var(--primary-glow);
-            padding: 10px 20px;
+            padding: 12px 20px;
             border-radius: 8px;
             font-family: 'Noto Sans TC', sans-serif;
             font-size: 1.05rem;
@@ -200,11 +210,14 @@
             transition: all 0.3s;
             box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
             font-weight: 700;
+            text-align: left; /* 文字靠左對齊 */
+            width: 220px; /* 統一按鈕寬度，形成整齊的側邊欄 */
         }
         .nav-buttons button:hover {
             background: var(--primary-glow);
             color: #000;
             box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+            transform: translateX(5px); /* 懸停時加入微小的右移動畫，增加互動感 */
         }
     </style>
 </head>
