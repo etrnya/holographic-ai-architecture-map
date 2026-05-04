@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技術決策與知識全息圖 (完整教學版)</title>
+    <!-- Vis.js -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- Marked.js (Markdown parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050a15;
+            --primary-glow: #00f3ff;
+            --secondary-glow: #7b2cbf;
+            --text-main: #e0e0e0;
+            --panel-bg: rgba(10, 15, 30, 0.92);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(0, 243, 255, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(123, 44, 191, 0.08), transparent 25%);
+            font-family: 'Noto Sans TC', sans-serif;
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        .header {
+            position: absolute;
+            top: 30px;
+            left: 40px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            margin: 0;
+            font-size: 2.2rem;
+            color: #ffffff;
+            text-shadow: 0 0 10px var(--primary-glow), 0 0 20px var(--primary-glow);
+            letter-spacing: 2px;
+        }
+
+        .header p {
+            margin: 5px 0 0 0;
+            font-size: 1rem;
+            color: #a0aabf;
+            font-weight: 300;
+        }
+
+        #mynetwork {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #side-panel {
+            position: absolute;
+            top: 0;
+            right: -60vw;
+            width: 400px; /* Default width */
+            max-width: 90vw;
+            height: 100vh;
+            background: var(--panel-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-left: 1px solid rgba(0, 243, 255, 0.3);
+            box-shadow: -10px 0 40px rgba(0, 0, 0, 0.7);
+            transition: right 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), width 0.4s ease;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            padding: 40px 40px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        #side-panel.open { right: 0; }
+        
+        /* 捲軸美化 */
+        #side-panel::-webkit-scrollbar { width: 8px; }
+        #side-panel::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        #side-panel::-webkit-scrollbar-thumb { background: var(--primary-glow); border-radius: 4px; }
+
+        .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 25px;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 2rem;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s, text-shadow 0.2s;
+            z-index: 30;
+        }
+        .close-btn:hover { opacity: 1; text-shadow: 0 0 10px var(--primary-glow); }
+
+        #node-title {
+            font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+            font-size: 1.8rem;
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #fff;
+            border-bottom: 2px solid var(--primary-glow);
+            padding-bottom: 10px;
+        }
+
+        #node-category {
+            font-size: 0.9rem;
+            color: var(--primary-glow);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+        }
+
+        /* Markdown 內容渲染樣式 */
+        #node-content { font-size: 1.05rem; line-height: 1.8; color: #cdd6f4; flex-grow: 1; padding-bottom: 50px; }
+        #node-content h1 { color: #fff; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px; font-size: 1.6rem;}
+        #node-content h2 { color: var(--primary-glow); margin-top: 30px; font-size: 1.3rem;}
+        #node-content h3 { color: #ffd166; margin-top: 20px; }
+        #node-content a { color: var(--primary-glow); text-decoration: none; }
+        #node-content a:hover { text-decoration: underline; }
+        #node-content blockquote { border-left: 4px solid var(--secondary-glow); background: rgba(123, 44, 191, 0.1); padding: 10px 15px; margin: 0; border-radius: 0 8px 8px 0;}
+        #node-content pre { background: #111b2b; padding: 20px; border-radius: 8px; border: 1px solid #2a3b5c; overflow-x: auto; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+        #node-content code { font-family: 'Courier New', Courier, monospace; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; color: #4cc9f0;}
+        #node-content pre code { background: transparent; padding: 0; color: inherit;}
+        #node-content table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        #node-content th, #node-content td { border: 1px solid #2a3b5c; padding: 10px; text-align: left; }
+        #node-content th { background: rgba(0, 243, 255, 0.1); color: var(--primary-glow); }
+
+        .analogy-box {
+            background: rgba(123, 44, 191, 0.15);
+            border-left: 4px solid var(--secondary-glow);
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 25px;
+            font-size: 0.95rem;
+        }
+        .analogy-title { color: #e0b0ff; font-weight: 700; margin-bottom: 5px; display: flex; align-items: center; }
+        .analogy-title svg { margin-right: 8px; width: 18px; height: 18px; }
+
+        #particles { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+        
+        .instruction {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.5);
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            pointer-events: none;
+            animation: pulse 2s infinite;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; box-shadow: 0 0 15px rgba(0, 243, 255, 0.5); }
+            100% { opacity: 0.5; }
+        }
+
+        .nav-buttons {
+            position: absolute;
+            top: 30px;
+            right: 40px;
+            z-index: 10;
+            display: flex;
+            gap: 15px;
+        }
+        .nav-buttons button {
+            background: rgba(10, 15, 30, 0.7);
+            border: 1px solid var(--primary-glow);
+            color: var(--primary-glow);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: 'Noto Sans TC', sans-serif;
+            font-size: 1.05rem;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+            font-weight: 700;
+        }
+        .nav-buttons button:hover {
+            background: var(--primary-glow);
+            color: #000;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="particles"></canvas>
+
+    <div class="header">
+        <h1>Tech-Architecture Hologram</h1>
+        <p>前後端、資料庫與 AI 驅動開發知識庫總成</p>
+    </div>
+
+    <div class="nav-buttons">
+        <button onclick="openTab('md-phase0', '第零階：裝備與生存指南', 'Phase 0')">🚀 裝備與起手式</button>
+        <button onclick="openTab('md-tech-stack', '技術選型與黃金套餐', 'Tech Stack')">📊 選型與套餐</button>
+        <button onclick="openTab('md-mermaid', '架構視覺化與 Mermaid', 'Architecture Diagramming')">🎨 架構視覺化</button>
+        <button onclick="openTab('md-bi', 'BI 儀表板與數據視覺化', 'Business Intelligence')">📈 戰情儀表板</button>
+        <button onclick="openTab('md-survival', '實戰避坑生存指南', 'Survival Guide')">🛡️ 生存指南</button>
+        <button onclick="openTab('md-dictionary', '非技術專有名詞字典', 'Dictionary')">📖 專有名詞字典</button>
+        <button onclick="openTab('md-notion-deploy', '網頁部署與 Notion 整合', 'Deployment')">🔗 部署與 Notion</button>
+        <button onclick="openTab('md-mental-models', '新手必備思維模型', 'Mental Models')">🧠 核心思維模型</button>
+        <button onclick="openTab('md-blindspots', '商業級專案三大盲點', 'Blind Spots')">🚨 商業盲點防禦</button>
+        <button onclick="openTab('md-medical-compliance', '醫療級 AI 最高合規指南', 'Medical Compliance')">🏥 醫療合規指南</button>
+        <button onclick="openTab('md-sandbox', 'Antigravity 沙盒實戰', 'Sandbox')">🔥 沙盒專案實戰</button>
+    </div>
+
+    <div id="mynetwork"></div>
+    <div class="instruction">[ 拖曳畫布以瀏覽 / 點擊閃爍節點檢視完整教學手冊與字典 ]</div>
+
+    <div id="side-panel">
+        <button class="close-btn" onclick="closePanel()">×</button>
+        <div id="node-category">Category</div>
+        <h2 id="node-title">Node Title</h2>
+        <div id="node-content">Content goes here...</div>
+        <div class="analogy-box" id="node-analogy" style="display: none;">
+            <div class="analogy-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                概念比喻
+            </div>
+            <div id="node-analogy-text"></div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MARKDOWN 隱藏區塊 (存放所有手冊與字典) -->
+    <!-- ========================================== -->
+
+<textarea id="md-guide" style="display:none;">
+# 核心實務擴充：AI 架構師的規格撰寫與溝通指南
+
+## 適用對象
+本指南適用於計畫使用 AI 工具（如 Cursor、Gemini、Claude）來輔助撰寫程式碼，期望將「開發時間」大幅縮短，並從「寫程式的打字員」轉型為「系統架構師」的實踐者。
+
+## 核心觀念：從「發包工程」看 AI 協作
+許多非技術人員在使用 AI 寫程式時常犯的錯誤，是給予過於模糊的指令（例如：「幫我寫一個可以上傳檢驗報告的網站」）。這就像是對著工頭說「幫我蓋一棟房子」，最終蓋出來的格局、管線與建材，絕對不會符合預期。
+
+在 AI 驅動開發的時代，**AI 是那位不知疲倦的資深工程師與工頭，而發出指令的人，必須擔當「建築師」的角色。** 建築師不需要親自砌磚，但必須給出極度精確的「藍圖（規格書）」。
+
+---
+
+## 藍圖定義：軟體規格書 (PRD) 的黃金框架
+在請 AI 寫下第一行程式碼之前，必須先在純文字檔中，清楚定義以下四大板塊：
+
+### 1. 使用者故事 (User Story) 與核心流程
+*   **句型範本**：「作為一個 [什麼角色]，我想要 [執行什麼操作]，以便於 [達成什麼業務目標]。」
+*   **範例**：「作為一名『醫檢師』，我想要『在系統中上傳一份 PDF 格式的 COA 報告』，以便於『系統能自動進行數值比對』。」
+
+### 2. 資料庫綱要 (Database Schema)
+*   **撰寫重點**：定義出表格名稱、欄位名稱、資料型態。
+*   **範例**：
+    *   表格：`coa_reports`
+    *   欄位：`id` (唯一識別碼)、`upload_user_id` (上傳者編號)、`status` (狀態：待處理/異常/合格)。
+
+### 3. API 規格 (前後端溝通協議)
+*   **撰寫重點**：定義傳送過去的資料（Request）與預期回傳的資料（Response）。
+
+### 4. 邊界條件與例外處理 (Edge Cases)
+*   **範例**：如果上傳的檔案大於 10MB，系統必須回傳「檔案過大請壓縮」。如果 OCR 辨識找不到成分，必須標示「人工介入處理」，不能讓系統直接崩潰。
+
+---
+
+## 實戰技巧：最佳提示詞 (Prompting) 策略
+
+### 技巧一：賦予角色與技術棧約束
+> **Prompt 範例**：「你現在是一位具備 10 年經驗的資深全端工程師。前端使用 React，後端使用 Python (FastAPI)，資料庫為 PostgreSQL。請在所有程式碼中遵循 OWASP 安全準則，特別留意權限驗證與防範 SQL Injection。」
+
+### 技巧二：先要計畫，再要程式碼 (Plan First, Code Later)
+> **Prompt 範例**：「這是我寫的系統規格書（貼上 PRD）。請先不要寫任何程式碼。請先列出你打算怎麼實作的『步驟計畫』。等我確認計畫無誤後，我們再一步一步開始寫程式。」
+</textarea>
+
+<textarea id="md-phase1" style="display:none;">
+# 階段一：現代化架構的最小可行性實踐（教學手冊）
+
+## 適用對象
+本教學專為具備基礎自動化經驗（如 Excel VBA、GAS）但未曾接觸現代網頁開發的初學者所設計。
+
+## 核心觀念：從「一條龍」到「專業分工」
+過去使用 GAS 時，通常是「一條龍」的模式：畫面、邏輯與資料庫全綁在一起。現代化軟體工程講求「專業分工」（解耦）。在階段一，首要目標是將系統拆分：
+1. **外場店面（前端網頁）**：只負責顯示資料與接收操作。
+2. **中央廚房（BaaS 雲端後端）**：只負責儲存資料與處理權限。
+
+為了降低初期架設伺服器的難度，將導入 **BaaS (Backend as a Service)**。目前業界最熱門的開源選項是 **Supabase**。
+
+---
+
+## 實作演練：由簡入深的三階段任務
+
+在開始前，請先至 Supabase 建立一個專案，取得 `URL` 與 `API Key`，並在 Database 建立一個名為 `records` 的資料表（包含 `id`, `title`, `content` 欄位），暫時將 RLS 權限設為完全公開讀取與寫入。建立一個 `index.html` 檔案準備實作。
+
+### 難度一（簡單）：Hello World 連線測試
+**目標**：確認網頁能成功連上資料庫，並在瀏覽器控制台印出資料，理解 API 溝通原理。
+
+```html
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>難度一：資料庫連線測試</h1>
+    <script>
+        const URL = '你的_SUPABASE_URL';
+        const KEY = '你的_SUPABASE_KEY';
+
+        async function testConnection() {
+            // 步驟：向中央廚房發送點餐單 (GET 請求)
+            const response = await fetch(`${URL}/rest/v1/records?select=*`, {
+                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
+            });
+            const data = await response.json();
+            console.log("從資料庫拿到的資料：", data);
+            alert(data.length > 0 ? "連線成功！請按 F12 查看控制台。" : "連線成功，但資料表是空的。");
+        }
+        
+        testConnection();
+    </script>
+</body>
+</html>
+```
+
+### 難度二（中階）：將資料渲染成網頁介面
+**目標**：將拿到的 JSON 冰冷數據，動態轉換為使用者看得懂的畫面區塊。
+
+```html
+<body>
+    <h1>難度二：檢驗公告列表</h1>
+    <div id="list-container">載入中...</div>
+
+    <script>
+        const URL = '你的_SUPABASE_URL';
+        const KEY = '你的_SUPABASE_KEY';
+
+        async function loadData() {
+            const container = document.getElementById('list-container');
+            try {
+                const response = await fetch(`${URL}/rest/v1/records?select=*`, {
+                    headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
+                });
+                const data = await response.json();
+                
+                container.innerHTML = ''; // 清空載入中文字
+                data.forEach(item => {
+                    const card = document.createElement('div');
+                    card.style = "border: 1px solid #ccc; margin: 10px; padding: 10px;";
+                    card.innerHTML = `<h3>${item.title}</h3><p>${item.content}</p>`;
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                container.innerHTML = "載入失敗";
+            }
+        }
+        loadData();
+    </script>
+</body>
+```
+
+### 難度三（進階）：實作互動表單新增資料 (POST)
+**目標**：不僅能讀取，還要能從網頁輸入資料，寫入 Supabase 資料庫，形成完整互動。
+
+```html
+<body>
+    <h1>難度三：新增檢驗紀錄</h1>
+    <input type="text" id="input-title" placeholder="輸入標題">
+    <input type="text" id="input-content" placeholder="輸入內容">
+    <button onclick="insertData()">新增紀錄</button>
+    <hr>
+    <div id="list-container"></div>
+
+    <script>
+        const URL = '你的_SUPABASE_URL';
+        const KEY = '你的_SUPABASE_KEY';
+
+        async function insertData() {
+            const title = document.getElementById('input-title').value;
+            const content = document.getElementById('input-content').value;
+
+            // 步驟：向廚房發送「新增」要求 (POST 請求)
+            await fetch(`${URL}/rest/v1/records`, {
+                method: 'POST',
+                headers: { 
+                    'apikey': KEY, 
+                    'Authorization': `Bearer ${KEY}`,
+                    'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify({ title: title, content: content })
+            });
+            
+            loadData(); // 重新載入畫面
+        }
+
+        async function loadData() { /* 沿用難度二代碼 */ }
+        loadData();
+    </script>
+</body>
+```
+</textarea>
+
+<textarea id="md-phase2" style="display:none;">
+# 階段二：掌握主流技術棧與 AI 驅動開發先修
+
+## 適用對象
+適合已理解「前後端 API 對接」原理（完成階段一），並準備進階至企業級標準架構的學習者。
+
+## 核心觀念：從「代工廚房」升級為「專屬智慧廚房」
+在階段一使用的 BaaS (Supabase) 適合快速驗證。但當業務邏輯變複雜（例如：在上傳資料前需要經過 OCR 圖片辨識），就需要建立「專屬後端（自營廚房）」。
+- **前端升級**：React。目前 AI 工具支援度最高、生態最完整的框架。
+- **後端升級**：Python (FastAPI)。AI 與資料處理的絕對王者。
+
+在階段二，重點不是手寫每一行程式，而是**「學習如何指揮 AI 工具寫出框架代碼，並看懂它」**。
+
+---
+
+## 實作演練：由簡入深的三階段任務
+
+### 難度一（簡單）：請 AI 蓋出專屬廚房 (FastAPI)
+**目標**：透過精準的規格書 (Prompt) 讓 AI 生成一支能運作的 API。
+
+**實作步驟**：
+1. 開啟 AI 工具（如 Cursor）。
+2. 輸入以下 Prompt：
+   > 「你是一個資深 Python 後端工程師。請幫我用 FastAPI 寫一支 API。這支 API 會接收一個 POST 請求，裡面包含一段文字 \`text\`。請將這段文字全部轉為大寫，並回傳 JSON 格式 \`{"result": 大寫文字}\`。請提供完整程式碼與如何在終端機執行的指令。」
+3. **驗證**：將程式碼存為 `main.py` 並照著 AI 的提示執行。找出「路由」與「邏輯」的位置。
+
+### 難度二（中階）：請 AI 打造系統化外場 (React)
+**目標**：透過 AI 生成 React 組件，理解現代前端的「組件化」思維。
+
+**實作步驟**：
+1. 繼續對 AI 下達指令：
+   > 「現在請切換為前端工程師角色。請幫我寫一個簡單的 React 組件。畫面上要有一個文字輸入框和一個按鈕。這是一個獨立的組件 (Component)，不用完整的專案結構，請提供這個 \`App.jsx\` 的程式碼即可。」
+2. **驗證**：觀察程式碼中的 `useState`。這就是 React 紀錄「畫面狀態」的核心魔法，當狀態改變時，畫面會自動更新。
+
+### 難度三（進階）：前後端完整對接與資料清洗
+**目標**：將難度一與難度二結合，模擬真實業務場景中的前後端資料傳遞。
+
+**實作步驟**：
+1. 針對前端 React 代碼，下達進階指令：
+   > 「請修改剛剛的 React 組件。當我點擊按鈕時，請使用 \`fetch\` 呼叫本機的 FastAPI \`http://localhost:8000/api\`。將輸入框的文字送過去，並把後端回傳的結果顯示在按鈕下方。」
+2. **進階挑戰**：要求 AI 在後端加上「資料清洗」邏輯。
+   > Prompt：「請修改 FastAPI，如果在傳入的文字中發現『髒話』或『特殊符號』，請直接回傳錯誤代碼 400 與錯誤訊息，不要進行大寫轉換。」
+</textarea>
+
+<textarea id="md-phase3" style="display:none;">
+# 階段三：整合 AI 與自動化工作流實務
+
+## 適用對象
+具備基礎架構觀念，並希望將日常繁雜業務（如：報表擷取、檢驗標準比對、跨系統通知）自動化，同時導入 AI 輔助判讀的實踐者。
+
+## 核心觀念：賦予系統「大腦」與「自動化生產線」
+- **自動化輸送帶 (n8n)**：將程式碼轉化為視覺化的流程圖。甚麼時候觸發、資料往哪送，一目了然。
+- **專屬知識庫 (RAG 架構)**：利用向量資料庫，先檢索企業內部真實文件，再讓 AI 回答，徹底消滅 AI 的「幻覺」。
+
+---
+
+## 實作演練：由簡入深的三階段任務 (以 n8n 為例)
+
+### 難度一（簡單）：建立基礎 Webhook 觸發器
+**目標**：熟悉視覺化介面，建立第一個能接收外部請求的工作流。
+
+1. 打開 n8n，新增一個 **Webhook Node**。設定 Method 為 `GET`，複製 `Test URL`。
+2. 新增一個 **Respond to Webhook Node**，設定內容為 JSON：`{"message": "自動化流程已啟動！"}`。
+3. 點擊 `Execute Workflow`，在瀏覽器貼上網址，驗證是否顯示自訂訊息。
+
+### 難度二（中階）：排程呼叫外部 API 與資料寫入
+**目標**：不需人工干預，讓系統定時自動執行任務（例如每天早上抓資料）。
+
+1. 將觸發器換成 **Schedule Trigger Node**（設定每天早上 09:00 觸發）。
+2. 新增 **HTTP Request Node**。設定網址為政府資料 API。
+3. 新增 **Google Sheets Node**。設定動作為 `Append Row`（新增資料）。將上一步抓到的資料，對應到試算表欄位。
+4. **驗證**：啟動工作流，觀察試算表是否自動增加資料。這完美取代了 GAS 的排程。
+
+### 難度三（進階）：打造 AI 報表讀取工作流 (RAG 雛形)
+**目標**：結合 AI 處理非結構化資料，將「死板的自動化」升級為「智慧工作流」。
+
+1. 建立觸發器（例如 Webhook 接收檔案）。
+2. 加入 **AI Agent Node (如 OpenAI/Gemini)**。輸入強大 Prompt：
+   > 「你是一位嚴謹的醫檢師。請提取出文件中的『檢驗批號』與『大腸桿菌數值』，並嚴格按照 JSON 格式輸出，不要包含廢話。」
+3. 加入 **If Node (條件判斷)**。條件：數值大於法規走 A 路線；否則走 B 路線。
+4. 異常路線：加入 **Line/Slack Node** 發送緊急通知給主管。正常路線：寫入資料庫。
+5. **核心反思**：落實「人在迴圈內 (Human in the loop)」。AI 可做初判發通知，但正式報告必須由專業人員確認。
+</textarea>
+
+<textarea id="md-phase4" style="display:none;">
+# 階段四：系統上線部署與資訊安全實務
+
+## 適用對象
+準備將本機開發的測試系統，正式上線開放給團隊或外部單位使用的實踐者。這是處理敏感資料時最不可妥協的防線。
+
+## 核心觀念：取得餐廳的「營運執照」與「安檢合格」
+在自己電腦上跑通系統，只代表菜煮得出來。若要對外營業，必須處理：
+1. **部署**：店面位置在哪裡？（讓別人能透過網址連進來）
+2. **金鑰管理**：保險箱密碼藏在哪？（保護環境變數）
+3. **權限控管**：誰有資格看帳本？（資安與存取控制）
+
+---
+
+## 實作演練：由簡入深的三階段任務
+
+### 難度一（簡單）：將靜態網頁免費上線 (Vercel)
+**目標**：將階段一寫的純前端網頁放上網路，讓世界上所有人都能透過網址存取。
+
+1. 註冊 **Vercel** 雲端平台帳號。
+2. 在電腦建立新資料夾，放入 `index.html`。
+3. 登入 Vercel，選擇 `Add New -> Project`。
+4. 將資料夾「拖曳 (Drag & Drop)」到指定區塊上傳。
+5. **驗證**：Vercel 會配發一組 `.vercel.app` 網址，透過手機連線測試。
+
+### 難度二（中階）：環境變數的隱身術
+**目標**：把寫死在程式碼裡的 API Key 隱藏起來。直接暴露 Key 是資安大忌。
+
+1. 在本機專案根目錄建立 `.env` 文字檔：
+   ```text
+   SUPABASE_URL="真實網址"
+   SUPABASE_KEY="真實密碼"
+   ```
+2. 將程式碼改為讀取環境變數的語法（如 Vite 的 `import.meta.env.VITE_SUPABASE_URL`）。
+3. **上傳部署時絕對不可包含 `.env`**。
+4. 進入 Vercel 後台的 `Environment Variables`，手動新增這兩個變數。系統會在雲端安全地將密碼注入。
+
+### 難度三（進階）：實作登入機制與資料列安全 (RLS)
+**目標**：資料存取必須遵循最小權限原則。確保登入的人只能看到他該看的資料。
+
+1. **啟用 Auth**：進入 Supabase 的 `Authentication` 開啟 Email 登入功能，建立測試帳號。
+2. **設定 RLS 政策 (Row Level Security)**：
+   - 針對 `records` 資料表點選 `Enable RLS`。
+   - 新增政策：`Enable read access for authenticated users only`。底層邏輯：「沒有登入權杖的請求，資料庫直接拒絕」。
+3. **前端修改**：使用 Supabase 套件實作登入頁面。登入後取得「JWT 通行證」，後續 `fetch` 皆須夾帶此通行證。
+4. **驗證**：未登入狀態呼叫 API，應收到 `401 Unauthorized`；登入後才能看到資料。
+</textarea>
+
+<textarea id="md-dictionary" style="display:none;">
+# 非技術人員的技術專有名詞字典
+
+本字典彙整了在「技術決策地圖」與教學手冊中出現的核心專有名詞，並輔以易懂的比喻（如餐廳營運），幫助非技術背景的學習者快速跨越技術術語的門檻，建立與 AI 或工程師溝通的共同語言。
+
+---
+
+## 壹、基礎架構與元件 (Infrastructure & Components)
+
+### 1. 前端 (Frontend)
+*   **定義**：軟體系統中直接與使用者互動的部分。負責畫面呈現、版面配置與接收使用者的點擊輸入。
+*   **餐廳比喻**：餐廳的「外場」。包含裝潢設計、實體菜單，以及負責引導顧客點餐的服務生。
+*   **代表技術**：HTML, CSS, JavaScript, React, Vue。
+
+### 2. 後端 (Backend)
+*   **定義**：隱藏在畫面背後的系統，負責處理商業邏輯（如計算折扣）、驗證權限與資料運算。
+*   **餐廳比喻**：餐廳的「內場廚房」與「經理」。負責確認訂位身分、依照 SOP 製作餐點，並阻擋不合理的請求。
+*   **代表技術**：Python (FastAPI), Node.js, Java。
+
+### 3. 資料庫 (Database)
+*   **定義**：系統中專門用來永久儲存、管理與查詢資料的軟體系統。
+*   **餐廳比喻**：餐廳的「食材倉庫」與保管重要帳本、VIP 名單的「保險箱」。
+*   **主要分類**：分為格式嚴謹的**關聯式資料庫**（如 PostgreSQL）與格式彈性的**非關聯式資料庫**（如 MongoDB）。
+
+### 4. API (Application Programming Interface / 應用程式介面)
+*   **定義**：不同軟體或系統之間進行資料交換與溝通的標準格式與通道。
+*   **餐廳比喻**：「點餐單」與廚房的「送餐口」。外場不需要親自進廚房做菜，只要把格式正確的點餐單放在送餐口，廚房做完就會從同一個窗口送出對應的餐點。
+
+### 5. BaaS (Backend as a Service / 後端即服務)
+*   **定義**：由雲端服務商提供現成的資料庫、API、權限驗證等後端基礎設施，開發者不需親自架設伺服器即可直接呼叫使用。
+*   **餐廳比喻**：「代工中央廚房」。店家不需要自己蓋廚房，只要負責外場接單，然後把標準化的訂單轉交給代工廚房處理即可。
+*   **代表服務**：Supabase, Firebase。
+
+---
+
+## 貳、語言與主流框架 (Languages & Frameworks)
+
+### 6. HTML / CSS / JavaScript
+*   **定義**：構成網頁介面的三大基礎語言。
+    *   **HTML**：負責骨架與內容（哪裡有按鈕、哪裡有文字）。
+    *   **CSS**：負責外觀與樣式（按鈕的顏色、文字的大小）。
+    *   **JavaScript**：負責肌肉與動作（點擊按鈕後會發生什麼互動）。
+
+### 7. React / Vue / Next.js
+*   **定義**：現代化的「前端框架」。幫助開發者建立複雜且易維護的網頁介面，且目前深受 AI 生成工具（如 Cursor）的完整支援。
+*   **概念比喻**：就像一套標準化的樂高積木，讓開發者能用模組化的方式拼湊出網頁畫面，而不必每一次都從泥巴開始捏起。
+
+### 8. Python / FastAPI
+*   **定義**：**Python** 是目前 AI 與資料科學領域市佔率最高的程式語言。**FastAPI** 則是用 Python 撰寫後端 API 的現代化高效能框架。
+*   **關聯性**：若系統未來需要大量處理報表、OCR 圖片辨識或呼叫 AI 大語言模型，使用 Python 建立專屬的後端廚房是最佳選擇。
+
+### 9. PostgreSQL
+*   **定義**：業界最穩健且主流的「關聯式資料庫」，將資料以嚴格的表格（Row/Column）形式儲存，確保資料的精確與交易一致性。
+*   **擴充性**：它支援 `pgvector` 擴充套件，這意味著在未來導入 AI 功能時，它能直接兼任「向量資料庫」的角色。
+
+---
+
+## 參、AI 與進階自動化技術 (AI & Automation)
+
+### 10. n8n
+*   **定義**：一套強大的開源自動化流程工具。能將不同系統的 API 串接起來，並以無程式碼 / 低程式碼的「視覺化流程圖」呈現。
+*   **應用場景**：自動定時抓取政府公告，並在收到特定檢驗標準更新時，自動排版寄發 Email 或 Line 通知。
+
+### 11. 向量資料庫 (Vector Database)
+*   **定義**：專門儲存「向量（Embedding）」的資料庫。它不依賴關鍵字完全一致來搜尋，而是透過計算空間中的「座標距離」來尋找語意相近的資料。
+*   **圖書館比喻**：一種進階的語意索書系統。當檢索「食物中毒」時，系統會透過語意關聯，自動找出包含「腸胃炎」、「食品安全」等字眼的文件。
+*   **代表服務**：Pinecone, Milvus。
+
+### 12. Embedding (向量化)
+*   **定義**：將人類理解的文字、圖片，轉換成 AI 模型能夠運算的「高維度數字陣列（座標）」。語意越相近的文字，在多維空間中的距離就越短。
+
+### 13. RAG (Retrieval-Augmented Generation / 檢索增強生成)
+*   **定義**：一種結合「搜尋引擎」與「AI 生成模型」的系統架構。其運作方式是：先從企業內部的向量資料庫中找出最相關的文件，再將這些文件提供給 AI 作為參考資料，要求 AI 根據這些文件回答問題。
+*   **目的**：確保 AI 提供的專業答案（如檢驗標準數值）是基於企業內部真實文件，而非憑空捏造。
+
+### 14. 幻覺 (Hallucination)
+*   **定義**：AI 大語言模型在缺乏明確事實根據時，以極度自信的語氣產生錯誤、不準確或虛構的回答。導入 RAG 架構便是為了消滅幻覺。
+
+### 15. OCR (Optical Character Recognition / 光學字元辨識)
+*   **定義**：將掃描的紙本報告、PDF 或圖片中的文字，轉換為電腦可以編輯與搜尋的純文字格式。常作為 AI 處理紙本檢驗報表的第一道關卡。
+
+---
+
+## 肆、軟體工程核心觀念 (Software Engineering Concepts)
+
+### 16. 解耦 (Decoupling)
+*   **定義**：將原本緊緊綁在一起的系統功能拆分開來，變成獨立運作的模組。
+*   **優勢**：例如將 GAS 的「畫面」與「資料處理」解耦，拆分成「純前端網頁」與「後端 API」。未來不論是要翻新畫面或是升級資料庫，都不會牽一髮而動全身。
+
+### 17. 組件化 (Component)
+*   **定義**：將網頁的某個功能區塊（如登入表單、特定的報表卡片）獨立包裝成一個標準化套件。
+*   **優勢**：修改該組件一次，系統中所有使用到該組件的頁面都會自動且同步更新，大幅提升維護效率並降低出錯率。
+
+### 18. MVP (Minimum Viable Product / 最小可行性產品)
+*   **定義**：用最低的開發成本與最核心的功能，快速打造出一個可以實際運作的產品雛形，用以測試需求或驗證技術可行性。完成後再逐步迭代升級，避免過度投資。
+
+### 19. Human in the loop (人在迴圈內)
+*   **定義**：在全自動化或 AI 系統的設計中，刻意將「人類專家的審核與決策」保留在關鍵節點上。
+*   **應用場景**：在醫療或高風險檢驗報告的 AI 辨識流程中，AI 負責初步擷取與數值判讀，但最終寫入正式紀錄前，必須由人類專業人員進行「確認與簽核」，以確保資安與責任歸屬。
+</textarea>
+
+<textarea id="md-survival" style="display:none;">
+# 真實戰場生存指南：排障、成本治理與舊系統遷移
+
+## 適用對象
+當學習者跨出理想的「本機測試環境」，準備在真實公務或檢驗體系中建立可運作的系統時，本指南將成為面對 Bug 崩潰、避免天價帳單與處理歷史包袱的實戰避坑手冊。
+
+---
+
+## 盲點一：本機環境建置的深水區 (Environment Hell)
+
+在撰寫第一行程式碼之前，非技術背景最容易卡在「電腦環境設定」。
+
+*   **痛點**：終端機顯示 `Python is not recognized`、環境變數未設定，或是 Node 模組安裝失敗。
+*   **生存策略**：
+    1.  **首選雲端開發 (Cloud IDE)**：直接跳過本機安裝。使用如 **GitHub Codespaces** 等服務，只要打開瀏覽器，系統已預先配置好完美的 Python 與 Node.js 開發環境。
+    2.  **標準化本機開發**：若必須使用本機電腦，請一律使用 **Cursor** 或 **VS Code** 編輯器，並避免手動從官網下載安裝檔。強烈建議請 AI 提供「如何透過套件管理工具（如 Windows 的 Winget 或 NVM）一鍵安裝開發環境」的精確指令。
+
+---
+
+## 盲點二：除錯心法與 CORS 跨來源阻擋 (Debugging Mindset)
+
+當程式一執行就噴出滿版紅字，千萬不要慌張，這對資深工程師而言也是每天的日常。
+
+*   **紅字閱讀法**：錯誤訊息（Stack Trace）通常落落長，但**關鍵永遠在最後三行**。直接複製最後三行貼給 AI，並附上情境：「我在執行 `API.py` 時遇到以下錯誤，請幫我解釋原因並給出修改建議」。
+*   **經典魔王 - CORS 錯誤**：
+    *   **現象**：前端 (Vercel) 呼叫後端 (Render) 時，瀏覽器顯示 `Blocked by CORS policy`。
+    *   **餐廳比喻**：後端中央廚房基於食安考量，會嚴格限制「只接受自家餐廳外場送來的訂單」。如果沒先在廚房名單（CORS 設定）上登記外場的專屬網址，廚房就會直接把訂單丟進垃圾桶。
+    *   **解法**：在 FastAPI 或 Node.js 後端設定中，將前端的網址（如 `https://my-app.vercel.app`）加入 CORS 允許名單 (Allow Origins) 即可。
+
+---
+
+## 盲點三：舊系統與新架構的無痛接軌 (Legacy Migration)
+
+在真實世界中，不可能要求所有人一夕之間拋棄過去十年的 Excel 與 Google Sheets，全面改用新系統。
+
+*   **痛點**：歷史檢驗數據全卡在數百個獨立的試算表中，手動轉移不切實際。
+*   **生存策略 (資料搬運自動化)**：
+    1.  利用 **n8n** 建立一條一次性的「搬運工作流」。
+    2.  **流程設計**：讀取 Google Sheets 節點 ➔ 資料格式清洗節點 (例如將民國年轉西元年、文字欄位對齊新資料庫規範) ➔ 寫入 Supabase (PostgreSQL) 節點。
+    3.  **雙軌並行**：為了無痛接軌，初期可設定成「雙軌並行」模式。當舊員工習慣性地在 Sheets 新增資料時，n8n 在背後自動同步一份到新資料庫，直到所有團隊成員都習慣新系統為止。
+
+---
+
+## 盲點四：雲端與 AI 服務的「隱藏帳單陷阱」 (Cost Control)
+
+雖然各大雲端服務（Vercel, Supabase, OpenAI）都有大方的免費額度，但「一行程式碼的失誤」卻可能導致瞬間破產。
+
+*   **痛點**：前端 React 中若 `useEffect` 沒寫好，或是 n8n 的迴圈設定錯誤，可能會在一分鐘內向 AI 服務發送數萬次請求。
+*   **生存策略 (防護機制設定)**：
+    1.  **預算上限硬停止 (Hard Cap)**：在 Supabase 的 Billing 設定中，務必開啟 `Spend Cap`，確保費用超過免費額度時，系統直接關閉服務，而非無上限信用卡扣款。OpenAI 後台也必須嚴格設定 `Usage limits`。
+    2.  **API 速率限制 (Rate Limiting)**：在自己架設的專屬廚房（FastAPI 後端）加上速率限制套件。例如：「同一個 IP 一分鐘內只能發送 10 次請求」。這不僅防護了部門的預算錢包，更是防止遭到惡意網路攻擊（DDoS）的基本資安防線。
+</textarea>
+
+<textarea id="md-tech-stack" style="display:none;">
+# 前後端與資料庫技術選型總表暨推薦套餐
+
+## 1. 前端技術選型表 (外場店面)
+| 技術名稱 | 核心特色 | 適用情境 | 學習難度 |
+| :--- | :--- | :--- | :--- |
+| **純 HTML/JS** | 最基礎、無需編譯 | 簡單的單頁活動、MVP 驗證 | ⭐ |
+| **React** | 組件化、生態系最豐富、AI 支援最佳 | 中大型企業應用、內部後台系統 | ⭐⭐⭐ |
+| **Vue.js** | 語法直覺、容易上手 | 適合初學者快速開發中型專案 | ⭐⭐ |
+| **Next.js** | React 的進階版，支援伺服器渲染 (SEO) | 面向大眾的官網、高流量電商 | ⭐⭐⭐⭐ |
+
+## 2. 後端技術選型表 (內場廚房)
+| 技術名稱 | 核心特色 | 適用情境 | 學習難度 |
+| :--- | :--- | :--- | :--- |
+| **Node.js (Express)** | 前後端語言統一 (皆使用 JS) | 即時通訊、串流、輕量級 API | ⭐⭐ |
+| **Python (FastAPI)** | 開發極速、AI/資料科學完美整合 | 需要大量數據處理、OCR、AI 運算的系統 | ⭐⭐ |
+| **Java (Spring Boot)** | 極度嚴謹、效能強大、生態成熟 | 銀行金融業、超大型企業級系統 | ⭐⭐⭐⭐⭐ |
+| **BaaS (Supabase)** | 將後端與資料庫打包，免寫 API 代碼 | 快速開發、個人專案、前端主導的系統 | ⭐ |
+
+## 3. 資料庫選型表 (保險箱)
+| 技術名稱 | 核心特色 | 適用情境 | 學習難度 |
+| :--- | :--- | :--- | :--- |
+| **PostgreSQL** | 最強的開源關聯式資料庫，支援向量運算 | 嚴格關聯（訂單、報表）、極度追求資料一致性 | ⭐⭐⭐ |
+| **MySQL** | 最普及的開源資料庫 | 一般中小型網站、傳統 CMS | ⭐⭐⭐ |
+| **MongoDB** | NoSQL 結構靈活，不需預先定義欄位 | 資料格式常變動、爬蟲資料儲存 | ⭐⭐ |
+| **Redis** | 暫存在記憶體中，讀寫極快 | 購物車、排行榜、短期 Token 驗證快取 | ⭐⭐ |
+
+---
+
+## 常見好用的「黃金組合套餐」
+
+### 🍽️ 套餐 A：「極速驗證」單人快炒店 (MVP / 個人開發者首選)
+*   **前端**：React (Vite)
+*   **後端 + 資料庫**：Supabase (BaaS)
+*   **部署**：Vercel
+*   **特色**：完全省去後端伺服器架設的煩惱。適合剛起步、只有前端技能的人，能用最短時間把點子變成能動的產品，隨時準備上線測試。
+
+### 🍽️ 套餐 B：「AI 智慧餐廳」全端標準組合 (本專案最推薦)
+*   **前端**：React (Vite)
+*   **後端**：Python (FastAPI)
+*   **資料庫**：PostgreSQL (可掛載 pgvector 向量擴充)
+*   **特色**：前端負責完美的互動體驗，後端強大的 Python 能無縫接軌所有 AI 模型與複雜的資料清洗邏輯。是目前 AI 創業與企業內部自動化系統的「最佳黃金組合」。
+
+### 🍽️ 套餐 C：「企業連鎖飯店」高併發大型架構
+*   **前端**：Next.js (完美處理 SEO 與首屏載入速度)
+*   **後端**：Java (Spring Boot) 或 Go
+*   **資料庫**：PostgreSQL + Redis (快取)
+*   **特色**：追求極致的效能與嚴謹度，適合銀行、大型電商等「不容許一絲錯誤」且同時在線人數極高的嚴苛場景。
+
+### 🍽️ 套餐 D：「無頭自動化」暗黑廚房 (行政與業務自動化首選)
+*   **觸發前端**：Google Forms 表單 或 Email 夾帶附件
+*   **後端邏輯**：n8n (視覺化自動化工具)
+*   **資料庫**：Google Sheets 轉存至 Supabase
+*   **特色**：完全不需撰寫任何網頁畫面，將日常繁雜的行政、檢驗報表、跨部門通知作業全數自動化。
+</textarea>
+
+<textarea id="md-phase0" style="display:none;">
+# 第零階：AI 開發裝備與實戰起手式 (Phase 0)
+
+## 適用對象
+準備正式啟動「AI-Driven-Project-Workflow」，但電腦中尚未安裝開發環境，且對終端機與程式碼沒有任何實務經驗的非技術專案負責人。
+
+---
+
+## 第一部：三大 AI 協作環境生存技能
+
+在 AI 輔助開發的新時代，不需要去背誦程式語法，但必須熟練掌握以下三項「生存裝備」的操作：
+
+### 技能一：AI 編輯器 (IDE) 實戰心法
+*   **Context (上下文脈絡) 就是一切**：AI 的智商很高但沒有記憶力。必須熟練使用 `@Files` 或 `@Docs` 指令，將預先寫好的 PRD 規格書或官方技術文件餵給它，否則它只會瞎猜並產出錯誤的結果。
+*   **Ctrl+K (生成) 與 Ctrl+L (對話)**：
+    *   `Ctrl+K`：用來「無中生有寫新程式」或「在行內直接修改現有程式」。
+    *   `Ctrl+L`：用來「詢問問題探討架構」或「貼上錯誤紅字請 AI 解釋與分析原因」。
+*   **Diff (差異比對) 審閱**：AI 生成後會出現綠色（新增）與紅色（刪除）的區塊對比。作為架構師，你的工作是確認邏輯無誤後再按下 `Accept`。
+
+### 技能二：終端機 (Terminal) 恐懼克服法
+終端機只是一個能「直接對電腦心臟下指令」的純文字視窗。只要記住以下三個高頻情境：
+1.  **走對房間 (`cd`)**：`cd my-project` 代表走進名為 my-project 的資料夾。如果走錯房間，AI 就會找不到檔案也無法執行專案。
+2.  **買材料 (`npm install` / `pip install`)**：當 AI 說「缺少某個套件模組」時，直接複製它給的安裝指令貼上並按 Enter 即可。
+3.  **看懂紅字 (Error Logs)**：遇到伺服器崩潰、滿畫面噴紅字時，**絕對不要恐慌**。只要將最後 10 行紅字反白複製，貼給 Cursor (`Ctrl+L`) 說：「幫我解決這個報錯」，AI 會直接幫你找出解法。
+
+### 技能三：Git 版本控制 (時光機與後悔藥)
+*   **Commit (存檔點)**：在實作任何大規模功能前（例如準備大改資料庫結構），先在 Git 圖形化介面中輸入「準備修改資料庫」並按下 Commit。
+*   **Revert (讀檔)**：如果 AI 把整個系統改壞了甚至出現連鎖報錯，只要點擊還原按鈕，就能瞬間回到上一個安穩的存檔點，這是保障心態不崩潰的終極防線。
+
+---
+
+## 第二部：裝備安裝與第一次親密接觸 (實戰演練)
+
+接下來，我們將不寫任何一行傳統的程式碼，純粹靠對話與指令，完成一個「會動的網頁倒數計時器」。
+
+### 步驟一：下載並安裝三大神器
+1.  **編輯器**：下載並安裝 [Cursor](https://www.cursor.com/)。安裝時一路按 Next (採用預設值即可)。
+2.  **執行環境**：下載並安裝 [Node.js](https://nodejs.org/) (請選擇有標示 LTS 的長期維護版本)。這是讓電腦聽得懂網頁語言的底層引擎。
+3.  **時光機**：下載並安裝 [GitHub Desktop](https://desktop.github.com/)。這是目前給非技術人員最友善的 Git 圖形化介面工具。
+
+### 步驟二：建立專案與終端機初體驗
+1.  在你的電腦桌面建立一個新的資料夾，命名為 `ai-first-project`。
+2.  打開 Cursor 編輯器，點擊左上角 `File -> Open Folder`，選擇剛剛建立的 `ai-first-project` 資料夾。
+3.  在 Cursor 中按下快捷鍵 `Ctrl + ~` (或是點擊上方選單 View -> Terminal)，打開位於下方的終端機 (Terminal) 面板。
+4.  在終端機中點擊游標，輸入：`npm init -y`，然後按 Enter。(這會在左側產生一個 `package.json` 檔案，就像是宣告這個資料夾正式成為專案的點名冊)。
+
+### 步驟三：指揮 AI 幫你寫程式
+1.  在 Cursor 左側的檔案總管，新增一個空白檔案並命名為 `index.html`。
+2.  打開 `index.html` 編輯區，按下 `Ctrl + K` (Mac 為 Cmd + K)。
+3.  在彈出的輸入框中，輸入以下 Prompt 指令：
+    > 「請幫我寫一個精美的倒數計時器網頁，使用純 HTML/CSS/JS 即可，不要用其他框架。背景要有科技感，預設倒數時間設定為 5 分鐘。請加上『開始』、『暫停』與『重置』三個按鈕。」
+4.  按下 Enter 讓 AI 生成程式碼。此時會看到畫面出現彩色的程式碼區塊，請點擊右下角出現的 `Accept` (或直接按 `Ctrl + Enter`)。
+
+### 步驟四：見證奇蹟
+1.  回到你的電腦桌面，打開 `ai-first-project` 資料夾。
+2.  直接對著剛生成的 `index.html` 檔案連續點擊兩下（電腦會自動使用 Chrome 或 Edge 等瀏覽器打開它）。
+3.  恭喜！你已經成功完成了一個擁有精美樣式與完整邏輯的倒數計時器，而且你完全沒有親手寫下任何一行語法。
+
+### 步驟五：利用 Git 建立安全防護網
+1.  打開 GitHub Desktop 軟體。點擊左上角 `File -> Add Local Repository`，選擇你桌面的 `ai-first-project` 資料夾。
+2.  系統會跳出警告表示這還不是一個 Git 儲存庫，請點擊底下的藍色連結 `create a repository`。
+3.  在左下方的 Summary 欄位輸入「完成初版倒數計時器」，然後點擊底下的 `Commit to main` 藍色按鈕。
+4.  **安全防護網建立完成！** 你現在已經擁有一個時光機存檔點。你可以回到 Cursor 中，隨便亂刪除程式碼來測試破壞系統。如果系統完全壞掉了，只要回到 GitHub Desktop 對著剛才的歷史紀錄點擊右鍵選擇 `Revert change` (或點擊 `Discard changes`)，一切就會瞬間神奇地還原。
+
+**準備就緒：**
+當你成功走完上述流程，表示你已經具備了操作神兵利器的能力。隨時可以進入「階段一」，正式啟動專案工作流了！
+</textarea>
+
+<textarea id="md-notion-deploy" style="display:none;">
+# 實務擴充：靜態網頁極速部署與 Notion 整合
+
+## 適用對象
+想要將本機端產生的 `.html` 檔案（如全息架構地圖）或是由 AI 生成的純靜態網頁，快速發佈到網路上讓跨部門團隊觀看，並完美嵌入至 Notion 筆記系統中的專案負責人。
+
+---
+
+## 核心觀念：網頁伺服器與 Notion 的安全限制
+基於資訊安全考量，Notion 本身並不允許直接上傳 HTML 檔案並在筆記頁面中直接渲染執行。如果強行將檔案拖曳進入，只會變成一個必須點擊下載的純文字附件。
+
+然而，只要先將網頁部署到網路上變成一個「公開網址 (URL)」，就能利用 Notion 內建的 `/embed` 指令，將動態網頁完美嵌入至筆記中，達到隨點隨用、無縫互動的終極效果。
+
+---
+
+## 零程式碼實戰：將網頁發佈至網際網路
+
+因為全息地圖（或一般的單頁式介紹網頁）只是一個「純靜態」的 HTML 檔案，沒有牽涉到後端伺服器與資料庫運算，因此部署過程極度簡單。請根據需求選擇以下兩種方案：
+
+### 方案 A：極速拖拉法 (Netlify Drop) —— 最快，只需 10 秒鐘
+不需要複雜的設定或綁定帳號，就像把檔案丟進雲端硬碟一樣直覺，最適合**開會前 10 分鐘需要產出網址**的緊急時刻。
+
+1.  **資料夾準備**：在電腦桌面上建立一個新資料夾（例如命名為 `decision-map`）。
+2.  **檔案改名 (非常重要)**：將 `.html` 檔案放入該資料夾中，並將其重新命名為 **`index.html`**。（這是全球網頁伺服器公認的首頁預設名稱，若不改名，網頁伺服器會因為找不到首頁而顯示錯誤）。
+3.  **上傳部署**：打開瀏覽器，前往 [Netlify Drop 官方網站](https://app.netlify.com/drop)。
+4.  將桌面上的 `decision-map` 資料夾直接用滑鼠拖曳進網頁中央的虛線框內。
+5.  等待約 3 秒鐘，系統就會立刻產生一個專屬的公開網址（例如 `https://friendly-unicorn-123.netlify.app`）。
+
+### 方案 B：架構師標準做法 (Vercel + GitHub) —— 適合持續更新
+如果預計未來還會常常利用 AI 去擴充這份網頁（例如加入新的功能或字典），建議採用此方案。這不僅是現代化前端的標準部署流程，也能完美銜接《第零階：起手式》與《階段四：系統部署》的知識。
+
+1.  **建立版本庫**：將改名為 `index.html` 的檔案放在專案資料夾中，打開 GitHub Desktop 建立第一個存檔點（Commit）。
+2.  **推送雲端**：點擊 GitHub Desktop 上方的 `Publish repository` 將專案推送到雲端的 GitHub 倉庫。
+3.  **串接部署**：登入 [Vercel](https://vercel.com) 雲端儀表板，點擊 `Add New Project`。
+4.  授權連接 GitHub 後，選擇剛剛上傳的專案並點擊 `Deploy`。
+5.  **後續無痛更新**：未來只要在本地端用 Cursor 等編輯器修改了檔案，並在 GitHub Desktop 按下同步按鈕，網路上的地圖就會在 5 秒內自動更新，永遠不需要再手動拖拉上傳檔案。
+
+---
+
+## 最終回：在 Notion 中嵌入完美畫面
+
+無論選擇上述哪一種方案，當成功取得屬於自己的公開網址後：
+
+1.  複製該部署網址 (URL)。
+2.  打開團隊專屬的 Notion 筆記頁面。
+3.  在空白處輸入 `/embed` 並按下 Enter。
+4.  將複製的網址貼入彈出的輸入框中並確認。
+5.  使用滑鼠拖拉調整 Notion 視窗的邊框大小。
+
+恭喜！現在整份具備強大互動性、內含所有技術字典與避坑指南的全息架構地圖（或任何專案儀表板），已經無縫嵌合在公司的營運知識庫中了。
+</textarea>
+
+<textarea id="md-mental-models" style="display:none;">
+# 實務擴充：新手必備的軟體工程思維模型 (Mental Models)
+
+## 為什麼需要思維模型？
+在 AI 時代，你不再需要去死背各種程式語言的語法（AI 會幫你寫），但你必須具備「軟體工程師的大腦運作方式」。
+
+這些被提煉出來的「思維模型」，能幫助你在面對未知的技術名詞或系統報錯時，不再感到恐懼，並能在關鍵時刻做出正確的架構決策。
+
+---
+
+## 1. 溝通模型：把電腦當作「極度聰明但毫無常識的員工」
+*   **傳統思維**：我跟 AI 說「做一個登入頁面」，它就應該知道裡面要有忘記密碼的功能。
+*   **工程思維**：電腦與程式語言完全沒有人類的「直覺 (Intuition)」。它只會 100% 絕對服從並執行你寫下的規則，而不是你「心裡預期的結果」。
+*   **實戰應用**：在撰寫 PRD (規格書) 時，必須習慣使用**極度邊界化**的思考（例如：如果用戶輸入空白密碼會怎樣？如果他瘋狂連續點擊登入按鈕十次會怎樣？）。不要預設電腦會「自動幫你想到」。
+
+## 2. 抽象化 (Abstraction)：開車不需要懂引擎原理
+*   **定義**：將極度複雜的底層技術，隱藏在一個簡單的「介面」背後。
+*   **實戰應用**：這就是為什麼要使用 API（例如 Stripe 第三方金流）。作為架構師，你不需要知道信用卡公司是如何加密傳輸扣款的，你只需要知道「我把使用者的卡號傳給 Stripe，Stripe 會回傳『成功』或『失敗』」。學會善用別人的「抽象化模組」，是快速建構系統的關鍵。
+
+## 3. 買 vs 做 (Build vs. Buy)：專注於商業價值，而非基礎設施
+*   **定義**：非技術負責人最常犯的致命錯誤，就是想要「從零開始親手打造所有的東西」。
+*   **實戰應用**：系統開發的目標是驗證商業模式，而不是發明新的水管。
+    *   需要會員登入？不要自己寫密碼加密與忘記密碼邏輯，直接用 Supabase Auth。
+    *   需要高階圖表管理？不要自己刻畫面，直接串接 Metabase 戰情儀表板。
+    *   **黃金法則**：只有在「公司最核心的商業邏輯」上，才投入 AI 去撰寫客製化的程式碼。其他基礎設施，能用現成的就用現成的。
+
+## 4. 逆向思考 (Inversion)：從「如何搞砸」開始設計
+*   **傳統思維**：我要怎麼讓這個系統完美運作？
+*   **工程思維**：我要怎麼讓這個系統徹底崩潰？
+*   **實戰應用**：在系統上線前，不要只測試「乖乖填寫表單」的完美情境。試著當一個奧客：上傳 10GB 的影片檔、在姓名欄位輸入 500 個英文字母、把網路拔掉後按下送出。這種尋找「極端案例 (Edge Cases)」的能力，是確保系統穩定度最重要的防線。
+
+## 5. 解耦 (Decoupling) 與模組化：樂高積木哲學
+*   **定義**：不要把所有邏輯寫成一長串死死的義大利麵條，而是拆分成獨立的積木。
+*   **實戰應用**：這就是為什麼我們將系統分為「前端（外場）」與「後端（廚房）」。如果今天公司想把網站改成手機 App，只要換掉「前端」即可，負責處理資料庫邏輯的「後端」完全不用重寫。
+
+---
+
+## 補充：那些最常被誤解的底層常識
+
+### Q: 到底什麼是「伺服器 (Server)」與「雲端 (Cloud)」？
+伺服器不是魔法，雲端也不在雲上。**它就只是一台永遠不關機、永遠連著高速網路的「別人的電腦」**。
+當我們說「把網站部署到雲端 (Vercel)」，意思就是把你的程式碼，複製一份放到亞馬遜或 Google 機房裡那台永遠不關機的電腦上，讓全世界的人隨時連進去觀看。
+
+### Q: 什麼是 JSON？為什麼 AI 跟資料庫都愛用它？
+JSON 就像是網路世界的**「國際標準報關單格式」**。
+當前端要跟後端要資料時，如果是人類對話，可能會說：「嗨，給我王小明的資料，他今年 25 歲，職業是工程師」。
+但電腦看不懂白話文的語氣，所以必須轉成 JSON 的格式：
+```json
+{
+  "姓名": "王小明",
+  "年齡": 25,
+  "職業": "工程師"
+}
+```
+它只是一種用大括號 `{}` 包起來、標示清楚「欄位名稱」與「內容」的結構化文字。AI 代理人非常擅長輸出 JSON，因為這能讓後續的軟體系統百分之百精準地抓取資料，而不會產生誤判。
+
+### Q: 什麼是 Localhost (本機端)？
+當你在 Cursor 寫完程式，在瀏覽器輸入 `http://localhost:3000` 看到的畫面，代表**「這個網站目前只存在於你的這台筆記型電腦裡」**。你的電腦同時扮演了「伺服器」與「訪客」的角色。在這個階段，就算你電腦燒掉了，也不會影響到任何真實世界的使用者。必須經過「部署 (Deployment)」，才能讓其他人看到。
+</textarea>
+
+<textarea id="md-blindspots" style="display:none;">
+# 實務擴充：商業級專案的三大致命盲點與防禦指南
+
+## 適用對象
+準備從「玩具沙盒專案」正式跨入「真實商業環境」，需要管理專案資安防護、資料庫關聯結構與 AI 開發品質的非技術專案負責人。
+
+---
+
+## 盲點一：AI 的「失憶症」與上下文衰退 (Context Rot)
+
+### 致命危機
+初學者常以為 AI 像人類一樣擁有無限的記憶力，於是在同一個對話視窗（Chat）中，連續對話幾十次，要求 AI 不斷修改程式。結果往往發現 AI 突然開始「胡言亂語」，甚至把剛寫好、能正常運作的功能改到完全崩潰。這就是技術圈常說的「上下文衰退」。
+
+### 底層原理
+每個 AI 模型（如 Claude 3.5 Sonnet）都有嚴格的「記憶容量上限（Context Window）」。當對話的歷史文字量超過這個上限時，AI 就會被迫「忘記」最前面的對話（例如一開始餵給它的規格書要求），導致它失去判斷基準，開始憑空想像並產生幻覺（Hallucination）。
+
+### 架構師防禦策略
+1.  **見好就收，開啟新對話 (New Chat)**：當一個特定的功能模組（例如「登入按鈕與畫面」）修改完成並確認沒問題後，**立刻開啟一個全新的對話視窗**來進行下一個功能（例如「報表匯出」）。
+2.  **善用錨點 (Anchor)**：在每個新對話的開頭，都要使用 `@Files` 指令，重新附上專案的 PRD 規格書，讓 AI 瞬間恢復該有的全域記憶，確保它不會走偏。
+3.  **絕對不在舊對話中搶救崩潰**：如果 AI 已經把系統改壞了，絕對不要在同一個混亂的視窗裡對它大吼修正。正確做法是：利用 Git 還原檔案後，開啟一個全新對話，將剛剛的錯誤訊息與規格書重新乾淨地餵給它。
+
+---
+
+## 盲點二：機密金鑰外洩與 `.env` 環境變數
+
+### 致命危機
+在現代架構中，串接外部服務（如 OpenAI 模型、Supabase 資料庫、Stripe 支付）時，雲端系統會配發給專案一串毫無規律的亂碼密碼，稱為 `API Key`。如果把這串密碼「直接寫死」在程式碼檔案裡，並推送到 GitHub 雲端，網路上的駭客掃描機器人會在 3 秒內抓取這把鑰匙，並開始瘋狂盜用額度，一晚就可能產生高達數十萬台幣的盜刷帳單。
+
+### 底層原理：`.env` 與 `.gitignore`
+軟體工程界發明了一種標準防護機制來解決這個問題：**環境變數檔案 (`.env`)**。
+*   把專案中所有機密的密碼與金鑰，統一集中寫在名為 `.env` 的獨立檔案裡。
+*   使用另一個名為 `.gitignore` 的隱形斗篷檔案，在裡面寫下嚴格的規則告訴 Git：「**絕對不可以把 `.env` 這個檔案上傳到網路上！**」
+
+### 架構師防禦策略
+1.  **永遠先確認 `.gitignore`**：在專案初始化的第一天，就立刻請 AI 幫忙檢查專案中是否有建立 `.gitignore` 檔案，並且明確要求裡面必須標明忽略 `.env`。
+2.  **本機端與雲端分離設定**：
+    *   在本機端 (Localhost) 開發時，密碼是安全地放在本地的 `.env` 檔案裡。
+    *   當網站正式部署到 Vercel 等雲端平台時，因為沒有上傳 `.env` 檔案，伺服器一開始會因為找不到密碼而報錯。這時必須登入 Vercel 的網頁後台，找到 `Environment Variables` (環境變數) 區塊，手動將密碼貼進去。這保證了密碼永遠處於最高層級的保護，不會暴露在網路原始碼中。
+
+---
+
+## 盲點三：資料庫的「關聯邏輯 (Relation)」
+
+### 致命危機
+如果將資料庫單純視為一張巨大的 Excel 表格，把「員工姓名」、「部門」、「檢驗項目」、「檢驗數值」、「檢驗時間」全部塞在同一張巨大的表裡。當未來該員工改名字或轉部門時，系統必須找出幾千筆舊的檢驗紀錄「一筆一筆修改」，這不僅會導致系統效能崩潰，更會引發嚴重的資料錯亂。
+
+### 底層原理：拆表與關聯
+真實世界的關聯式資料庫 (如 PostgreSQL) 是由多張互相獨立的表格精密組裝而成的。
+*   **主鍵 (Primary Key, PK)**：每一張表裡的每一筆資料，都必須有一個「絕對不會重複的專屬身分證字號」（例如系統自動生成的 `UUID` 亂碼）。這就是主鍵。
+*   **外鍵 (Foreign Key, FK)**：用來連結別張表格身分證字號的欄位。
+
+### 白話文商業比喻
+想像一間大型醫檢中心：
+1.  **【病患資料表】**：只紀錄姓名、血型、電話。每位病患有一個專屬的 `病患_ID` (這就是主鍵)。
+2.  **【檢驗紀錄表】**：紀錄每天的檢驗數值與時間。這張表裡**不需要**重複填寫病患的名字跟電話，只需要記錄是哪個 `病患_ID` 來測的 (這就是外鍵)。
+
+當年底需要產出綜合報表時，系統會自動利用這個 `病患_ID` 去【病患資料表】裡精準抓出最新的姓名與電話，完美拼接起來。這種「一對多」的設計保證了資料的一致性與無限擴充性。
+
+### 架構師防禦策略
+在利用 AI (如 `project-spec-generator`) 產出 PRD 規格書時，必須明確指示 AI：「請幫我梳理資料庫表格結構，明確標示出各個表格的 **主鍵 (Primary Key)** 以及表格之間的 **一對多關聯性 (Foreign Key)**」。擁有這層核心概念，AI 所規劃出的資料庫架構，將具備能支撐百萬筆商業資料的工業級穩固度。
+</textarea>
+
+<textarea id="md-medical-compliance" style="display:none;">
+# 實務擴充：醫療級 AI 專案最高合規指南
+
+## 適用對象
+身處醫療檢驗、生技研發或須受 FDA 等嚴格法規監管的產業，負責規劃與評估 AI 系統導入的專案負責人。
+
+---
+
+## 為什麼醫療產業需要最高級別的防禦？
+在一般的新創或內部行政專案中，開發的重點是「敏捷與速度」；但在醫療與檢驗體系中，「病患的檢驗數據」與「身分隱私 (PII / PHI)」是絕對不可觸碰的紅線。稍有不慎，企業將面臨天價罰款與信譽崩盤的災難。
+
+以下是醫療級 AI 專案在架構設計時，必須嚴格遵守的三大核心防線：
+
+---
+
+## 防線一：AI 代理人的「訓練資料截取」危機與 API 選擇
+
+### 致命危機
+市面上常見的 AI 工具（例如直接在網頁上使用的 ChatGPT 或 Claude）預設會將用戶傳入的對話與文件，**「拿去訓練下一代 AI 模型」**。如果將寫有病患姓名與血液檢驗結果的 PDF 報告上傳，病患的檢驗機密就可能在未來變成全世界網友詢問 AI 時的回答素材。
+
+### 架構師防禦策略：商業版 API 與 Zero-Data Retention
+1.  **絕對禁止使用公用網頁版處理機密**：在操作真實醫療數據時，全面禁止員工手動將報表複製貼上到免費版或一般付費版的 AI 網頁對話框中。
+2.  **強制採用 Enterprise API**：在撰寫 PRD 規格書時，必須明確規定：**「所有 AI 串接必須使用官方商業級 API (如 OpenAI API 或 Azure OpenAI)」**。因為這類商業級 API 受到嚴格的 B2B 條款約束，具有 **Zero-Data Retention (零資料保留)** 的法律承諾，保證絕對不會將傳入的資料用於模型訓練。
+
+---
+
+## 防線二：去識別化 (De-identification) 的系統架構
+
+### 致命危機
+即使確保了 AI 供應商不會拿資料去訓練，但在網路上直接傳送病患的身分證字號與病歷明細，仍不符合美國 HIPAA 或國際 ISO 27001 等嚴格的資訊安全標準。
+
+### 架構師防禦策略：設計「清洗攔截層」
+在系統架構中，必須在「本地資料庫」與「雲端 AI 模型」之間，設計一道強制的去識別化閘道 (Anonymization Gateway)。
+
+*   **實戰範例**：
+    *   **錯誤作法**：直接將整份 PDF（包含「王小明、身分證 A123456789、白血球數值 12000」）丟給 AI 分析。
+    *   **正確作法**：系統在送出前先將「王小明」與「身分證」替換成一串無意義的代碼（如 `Patient_X99`）。然後只將「`Patient_X99`, 白血球數值 12000」丟給 AI。等 AI 分析完退回結果後，系統再利用代碼對應表，將名字還原並顯示在內部螢幕上。
+*   **PRD 關鍵字**：在利用 AI 生成規格書時，務必加上一句：**「送出給 LLM 分析前，必須實作去識別化邏輯，過濾掉所有 PII (個人可識別資訊)。」**
+
+---
+
+## 防線三：不可竄改的稽核軌跡 (Audit Trail)
+
+### 致命危機
+傳統的資料庫設計往往只紀錄「當下最新的狀態」。如果在一次 FDA 稽核中，檢查員發現某份檢驗報告的數值有被修改過的痕跡，但系統卻回答不出「是誰改的」，這套系統將立刻被判定為不合格。
+
+### 架構師防禦策略：凡走過必留下痕跡
+醫療級系統最重視的是歷史追蹤能力。如果有人（或自動化程式）修改了一筆檢驗數值，系統必須精確記錄：**「是誰 (Who)、在什麼時間 (When)、在哪個模組 (Where)、把什麼數字改成了什麼數字 (What)」**。
+
+*   **實戰落地 (以 Supabase 為例)**：
+    *   在 Supabase 這類現代化強大資料庫中，具備了自動觸發寫入紀錄的功能 (Trigger)。
+    *   在 PRD 規格書中加入這條嚴格限制：**「針對核心的『檢驗數據表』，必須建立對應的『稽核日誌表 (Audit Logs)』。任何對檢驗數據的新增、修改或刪除，都必須強制在日誌表中自動寫入一筆不可刪除的紀錄。」** 擁有這道防線，系統將能從容面對最高級別的法規檢驗。
+</textarea>
+
+<textarea id="md-sandbox" style="display:none;">
+# 實務擴充：沙盒專案實戰演練 (Antigravity 指令式開發)
+
+## 適用對象
+不想安裝任何本地端編輯器 (如 Cursor 或 Docker)，且具備一點點 Google Apps Script (GAS) 或 JavaScript 基礎概念，想要直接體驗「只靠講話就寫出網頁」的跨領域專案負責人。
+
+---
+
+## 為什麼要進行這個演練？
+這個「十分鐘倒數計時器」沙盒專案，完美展示了現代化 **「指令式開發 (Prompt-Driven Development)」** 的巨大威力。在過去，開發者需要設定環境、學習 HTML/CSS 排版、查閱 JavaScript 語法。現在，專案負責人只需要扮演「總架構師」發號施令，AI 代理人 (如 Antigravity) 會在背景幫忙處理所有底層的程式碼細節。
+
+---
+
+## 演練第一階段：從零生出最小可行性產品 (MVP)
+
+**情境**：需要一個充滿現代感的倒數計時器。
+**操作方式**：直接在 Antigravity (或是偏好的 AI Agent) 的對話框中貼上以下指令：
+
+> 「請幫我在專案目錄下建立一個名為 `sandbox-timer` 的新資料夾。在裡面撰寫一個 `index.html`，實作一個『十分鐘倒數計時器』，介面要充滿現代感（類似 Apple 的極簡玻璃透視風格）。寫完後，請告訴我如何直接用瀏覽器打開觀看結果。」
+
+**成果解析**：
+*   AI 會自動在硬碟中建立資料夾與檔案。
+*   只要雙擊 `index.html`，完全不需要架設任何伺服器，瀏覽器就能直接渲染運行。
+*   打開原始碼會發現，底層的 JavaScript `function updateDisplay() { ... }` 邏輯，與過去在寫 GAS 腳本的方式如出一轍！
+
+---
+
+## 演練第二階段：需求變更與架構迭代 (Iteration)
+
+**情境**：初版做好了，但發現只能倒數 10 分鐘太受限了，需要自訂時間功能。
+**操作方式**：在同一個對話框中，繼續對 AI 下達迭代指令：
+
+> 「這個計時器我想要可以自己改倒數時間。旁邊需要有常見的預設時間按鈕（1、3、5、10、20、30、60 分鐘），並提供一個可以輸入任意分鐘數的自訂欄位。」
+
+**成果解析**：
+*   **不砍掉重練**：AI 會在原本的程式碼基礎上，聰明地加入左側設定面板，並重新調整排版。
+*   **共用函式抽取**：如果打開原始碼，會發現 AI 像一個資深工程師一樣，把設定時間的邏輯抽離成一個獨立的 `setTime(minutes)` 共用函式，供所有預設按鈕與輸入框呼叫。這正是優良軟體工程「不要重複造輪子 (DRY)」的最佳實踐。
+
+---
+
+## 演練第三階段：進階體驗與硬體 API 存取
+
+**情境**：為了讓專案具備「商業級軟體」的精緻感，需要加入深色模式保護眼睛，以及時間到的提示音。
+**操作方式**：繼續對 AI 提出進階要求：
+
+> 「請幫我在右上角加入切換『深色模式 (Dark Mode)』的功能。另外，當時間倒數歸零時，要自動發出提示音（請不要依賴外部下載的 mp3 檔案）。並且在最後10秒加上紅色閃爍特效。」
+
+**成果解析**：
+*   **CSS 變數魔法**：AI 會利用最現代的 CSS 變數 (`:root` 與 `data-theme`)，平滑地將整個畫面的背景、按鈕、玻璃透視面板切換成不刺眼的深邃色調。
+*   **Web Audio API**：為了解決不依賴外部 mp3 檔案的難題，AI 直接呼叫了瀏覽器底層強大的 `Web Audio API`，讓電腦的音效卡即時合成出清脆的三角波鬧鐘聲。即使在完全沒有網路的深山環境下也能完美運作！
+
+---
+
+## 總結心法
+經歷這三個階段的練習，等同親手走完了一遍現代軟體開發的標準生命週期（MVP -> 迭代升級 -> 進階優化）。雖然完全沒有手寫任何一行語法，卻精準主導了整個架構與介面的成型。**這就是 AI 時代「架構師大腦」的終極價值！**
+</textarea>
+
+<textarea id="md-mermaid" style="display:none;">
+# 實務擴充：系統視覺化與 Mermaid 範本庫
+
+## 適用對象
+需要向高階主管提案、與跨部門溝通系統流程，或希望提升軟體規格書 (PRD) 專業度的架構規劃者。
+
+## 核心觀念：Diagram as Code (畫圖即寫程式)
+過去繪製流程圖，常使用 Visio 或 PowerPoint，不僅耗時且難以對齊排版。現代架構師廣泛採用 **Mermaid.js**。這是一種「將純文字轉化為圖表」的技術，完美契合 AI 時代——因為 AI 最擅長生成文字。只需給予 AI 指令，它就能直接產出結構完美的系統架構圖，且語法完全支援嵌入至 GitHub、Notion 與各類 Markdown 文件中。
+
+---
+
+## 實戰範本庫 (可直接複製至 [Mermaid Live Editor](https://mermaid.live/) 檢視)
+
+### 範本一：基礎系統架構圖 (Flowchart)
+**應用情境**：向主管或非技術人員展示前端、後端與資料庫之間的關聯。
+
+```mermaid
+graph LR
+    User([檢驗所員工]) -->|瀏覽器| Front[前端: React/Vercel]
+    Front -->|API 請求| Back[後端: FastAPI/Render]
+    Back -->|讀寫資料| DB[(資料庫: Supabase)]
+    Back -->|發送異常通知| Line[Line Notify]
+    
+    style Front fill:#4cc9f0,stroke:#333,stroke-width:2px,color:#000
+    style Back fill:#7b2cbf,stroke:#333,stroke-width:2px,color:#fff
+    style DB fill:#ffd166,stroke:#333,stroke-width:2px,color:#000
+```
+
+### 範本二：登入與驗證循序圖 (Sequence Diagram)
+**應用情境**：清楚解釋「登入機制」或「複雜業務審核流程」的先後順序。
+
+```mermaid
+sequenceDiagram
+    participant U as 醫檢師
+    participant F as 前端網頁
+    participant B as 後端 API
+    participant DB as 資料庫
+
+    U->>F: 1. 輸入帳號密碼
+    F->>B: 2. 傳送登入請求 (POST)
+    B->>DB: 3. 比對密碼與 RLS 權限
+    DB-->>B: 4. 驗證成功
+    B-->>F: 5. 核發數位通行證 (JWT Token)
+    F-->>U: 6. 顯示成功登入畫面並導向首頁
+```
+
+### 範本三：資料庫實體關聯圖 (ERD)
+**應用情境**：在設計初期，定義資料庫的表格架構與一對多關聯性。
+
+```mermaid
+erDiagram
+    USERS ||--o{ REPORTS : "上傳"
+    USERS {
+        uuid id PK
+        string name
+        string role
+    }
+    REPORTS {
+        int id PK
+        uuid user_id FK
+        string batch_number
+        boolean is_passed
+        timestamp created_at
+    }
+```
+
+---
+
+## AI 協作秘訣 (Prompt 範例)
+在實務上，完全不需要死背上述的括號與箭頭語法。請直接使用以下 Prompt 交給 AI 處理：
+
+> 「你是一位資深系統架構師。請根據我以下的業務流程敘述，幫我用 `Mermaid` 語法產出一張『循序圖 (Sequence Diagram)』。請在節點上加上適當的顏色標註。
+> 流程：使用者上傳檢驗報告 -> 系統呼叫 AI OCR 模型 -> OCR 回傳辨識結果 -> 系統比對法規標準 -> 若數值超標則發送 Line 通知給主管，否則將合格紀錄存入資料庫。」
+</textarea>
+
+<textarea id="md-bi" style="display:none;">
+# 實務擴充：BI 儀表板與數據視覺化指南
+
+## 適用對象
+系統已經開始累積實際數據，需要定期向管理層匯報「檢驗良率」、「異常趨勢」或「業務量分佈」，希望將冰冷的資料表轉化為高階決策看板的實踐者。
+
+## 核心觀念：資料變現的最後一哩路
+將資料安全地存進 PostgreSQL 資料庫，對工程師來說是終點，但對企業主管來說只是起點。**BI (Business Intelligence) 工具** 能直接連線至資料庫底層，透過「拖拉點選 (Drag & Drop)」的方式，零程式碼產出動態且即時更新的戰情儀表板，徹底告別手動匯出 Excel 再畫圖的繁瑣時代。
+
+---
+
+## 工具選型建議
+
+1.  **Metabase (開源王者)**
+    *   **優勢**：介面極度友善直覺，非常適合不懂 SQL 語法的行政主管或營運人員直接探索資料。支援極為美觀的圖表與自動化 Email/Slack 排程報表。
+    *   **適用情境**：企業內部高階戰情室、團隊內部數據共享。
+2.  **Looker Studio (前 Google Data Studio)**
+    *   **優勢**：完全免費，能與 Google 體系 (Google Sheets, Google Analytics) 進行無縫的混合資料整合。
+    *   **適用情境**：需要快速對外產出報告連結、或是已經大量依賴 Google 生態系的團隊。
+
+---
+
+## 實戰演練：建立第一個戰情儀表板 (以 Metabase + Supabase 為例)
+
+### 步驟一：建立「唯讀」資料庫分身 (Security First)
+**資安警告**：絕對不要使用最高權限（擁有刪除資料表能力）的預設密碼來連接 BI 工具！如果有人在 BI 介面不小心下達了刪除指令，將造成毀滅性災難。
+
+1.  進入 Supabase 的 SQL Editor 介面。
+2.  執行以下指令，在資料庫中建立一個專屬 BI 的「唯讀帳號」：
+    ```sql
+    -- 1. 建立一個只能讀取 (SELECT) 的角色
+    CREATE ROLE bi_readonly WITH LOGIN PASSWORD '請替換成複雜的專屬密碼';
+    -- 2. 允許連線至資料庫
+    GRANT CONNECT ON DATABASE postgres TO bi_readonly;
+    -- 3. 允許使用 public 結構
+    GRANT USAGE ON SCHEMA public TO bi_readonly;
+    -- 4. 賦予所有表格的「讀取權限」(禁止新增、修改、刪除)
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO bi_readonly;
+    ```
+
+### 步驟二：串接資料庫
+1.  註冊並登入 Metabase (或 Looker Studio)。
+2.  選擇「新增資料庫連線 (Add Database)」，資料庫類型選擇 `PostgreSQL`。
+3.  輸入從 Supabase Database 設定頁面取得的連線資訊：
+    *   **Host**: `aws-0-ap-northeast-1.pooler.supabase.com` (依專案實際分配為主)
+    *   **Port**: `5432` 或 `6543`
+    *   **Database Name**: `postgres`
+    *   **User**: `bi_readonly` (剛剛在步驟一建立的唯讀帳號)
+    *   **Password**: 剛剛設定的唯讀密碼
+
+### 步驟三：零程式碼建立趨勢圖
+1.  連線成功後，點擊首頁的「向資料提問 (Ask a question)」。
+2.  選擇 `records` (或檢驗報告) 資料表。
+3.  **過濾 (Filter)**：篩選出「狀態 = 異常」的資料列。
+4.  **總計 (Summarize)**：依據「建立時間 (Created At)」按「月 (Month)」進行群組計數。
+5.  點擊右下角的「視覺化 (Visualize)」，系統會自動畫出一條精準的「每月異常案件趨勢線」。
+6.  將圖表儲存，並將其釘選放置於團隊專屬的儀表板 (Dashboard) 上。
+
+### 步驟四：自動化戰情匯報 (Subscriptions)
+將儀表板設定好後，可使用 Metabase 的「Dashboard Subscriptions」功能：
+*   讓系統在每週一早上 08:00，自動將這份「最新檢驗戰情看板」進行高畫質截圖，並轉成 PDF 檔案，定時寄送到主管的 Email 或發送至團隊的 Line/Slack 群組中。這才是發揮自動化系統最大商業價值的時刻。
+</textarea>
+
+    <!-- ========================================== -->
+    <!-- 核心 JS 邏輯 -->
+    <!-- ========================================== -->
+    <script>
+        // 將隱藏 textarea 的 Markdown 內容提取出來
+        const mdData = {
+            'md-guide': document.getElementById('md-guide').value,
+            'md-phase1': document.getElementById('md-phase1').value,
+            'md-phase2': document.getElementById('md-phase2').value,
+            'md-phase3': document.getElementById('md-phase3').value,
+            'md-phase4': document.getElementById('md-phase4').value,
+            'md-dictionary': document.getElementById('md-dictionary').value,
+            'md-survival': document.getElementById('md-survival').value,
+            'md-tech-stack': document.getElementById('md-tech-stack').value,
+            'md-mermaid': document.getElementById('md-mermaid').value,
+            'md-bi': document.getElementById('md-bi').value,
+            'md-phase0': document.getElementById('md-phase0').value,
+            'md-notion-deploy': document.getElementById('md-notion-deploy').value,
+            'md-mental-models': document.getElementById('md-mental-models').value,
+            'md-blindspots': document.getElementById('md-blindspots').value,
+            'md-medical-compliance': document.getElementById('md-medical-compliance').value,
+            'md-sandbox': document.getElementById('md-sandbox').value,
+        };
+
+        function openTab(mdId, title, cat) {
+            const rawMd = mdData[mdId];
+            if(rawMd) {
+                nodeTitle.innerText = title;
+                nodeCategory.innerText = cat;
+                nodeContent.innerHTML = marked.parse(rawMd);
+                sidePanel.style.width = window.innerWidth < 800 ? '90vw' : '55vw';
+                nodeAnalogy.style.display = 'none';
+                
+                document.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+                
+                sidePanel.classList.add('open');
+                sidePanel.scrollTop = 0;
+            }
+        }
+
+        const knowledgeBase = {
+            0: { cat: 'Core Target', title: 'AI 驅動架構師指南', mdId: 'md-guide' },
+            100: { cat: 'Survival Guide', title: '戰場生存避坑指南', mdId: 'md-survival' },
+            101: { cat: 'Architecture Diagramming', title: '系統視覺化指南', mdId: 'md-mermaid' },
+            102: { cat: 'Business Intelligence', title: 'BI 儀表板整合', mdId: 'md-bi' },
+            105: { cat: 'Phase 0', title: '第零階：裝備與起手式', mdId: 'md-phase0' },
+            106: { cat: 'Deployment', title: '網頁部署與 Notion', mdId: 'md-notion-deploy' },
+            107: { cat: 'Mental Models', title: '新手必備的思維模型', mdId: 'md-mental-models' },
+            108: { cat: 'Blind Spots', title: '商業級盲點防禦', mdId: 'md-blindspots' },
+            109: { cat: 'Medical Compliance', title: '醫療級合規指南', mdId: 'md-medical-compliance' },
+            110: { cat: 'Sandbox', title: '沙盒實戰演練', mdId: 'md-sandbox' },
+            
+            // Phase nodes mapping to full manuals
+            1: { cat: 'Phase 1', title: '階段一：教學手冊', mdId: 'md-phase1' },
+            2: { cat: 'Phase 2', title: '階段二：教學手冊', mdId: 'md-phase2' },
+            3: { cat: 'Phase 3', title: '階段三：教學手冊', mdId: 'md-phase3' },
+            4: { cat: 'Phase 4', title: '階段四：教學手冊', mdId: 'md-phase4' },
+            99: { cat: 'Dictionary', title: '專有名詞字典', mdId: 'md-dictionary' },
+
+            // Quick tooltip nodes (Concepts)
+            11: { cat: 'Frontend', title: '前端外場 (HTML/Vue)', content: '系統中直接與使用者互動的部分。負責畫面呈現、版面配置與接收使用者的點擊輸入。', analogy: '餐廳的外場與服務生。顧客唯一看得見的地方。' },
+            12: { cat: 'BaaS', title: '代工廚房 (Supabase)', content: '後端即服務 (BaaS)。提供現成的資料庫與權限系統，免去初期架設伺服器的煩惱。', analogy: '代工中央廚房。不需自己蓋廚房，將訂單交給他們處理即可。' },
+            13: { cat: 'Concept', title: '解耦 (Decoupling)', content: '將原本緊緊綁在一起的系統功能拆分開來，變成獨立運作的模組。', analogy: '將點餐流程與做菜流程分開，換服務生不會影響廚師做菜。' },
+
+            21: { cat: 'Frontend', title: '系統化外場 (React)', content: '現代化的前端框架。目前深受 AI 生成工具（如 Cursor）的完整支援，能快速生成高品質介面。', analogy: '標準化的樂高積木或速食店點餐機。' },
+            22: { cat: 'Backend', title: '專屬廚房 (FastAPI)', content: 'Python 是目前 AI 領域的王者。若需大量處理報表、OCR 圖片辨識，這是最佳選擇。', analogy: '自營的內場廚房。負責所有客製化料理的製作。' },
+            23: { cat: 'Database', title: '關聯式資料庫 (PostgreSQL)', content: '業界最穩健的主流資料庫，將資料以嚴格的表格形式儲存，確保交易一致性。', analogy: '存放重要帳本與機密配方的堅固保險箱。' },
+            24: { cat: 'Concept', title: '組件化 (Component)', content: '將網頁的某個功能區塊獨立包裝成一個標準化套件。修改一次，系統中所有頁面同步更新。', analogy: '餐廳裡標準化的餐盤與桌椅，哪裡壞了換哪裡。' },
+
+            31: { cat: 'Automation', title: '視覺化工作流 (n8n)', content: '強大的開源自動化工具。能將不同系統的 API 以無程式碼的「視覺化流程圖」串接。', analogy: '自動化中央控制室。什麼時間開燈、食材分發到哪，皆可視覺化設定。' },
+            32: { cat: 'Database', title: '向量資料庫 (Vector DB)', content: '專門儲存「向量」的資料庫。透過計算空間中的座標距離來尋找「語意相近」的資料。', analogy: '圖書館的進階索書號。找「食物中毒」時，會自動關聯「食品安全」。' },
+            33: { cat: 'AI Arch', title: '知識庫 (RAG)', content: '檢索增強生成架構。先從企業內部的向量資料庫中找出最相關的文件，再交給 AI 作為參考資料來回答。', analogy: '給 AI 顧問一本內部員工守則，並要求他「只能照著手冊回答」。' },
+            34: { cat: 'AI Concept', title: '消滅幻覺 (Hallucination)', content: 'AI 在缺乏明確事實根據時，產生錯誤回答的現象。透過 RAG 架構能有效消滅幻覺。', analogy: '防止顧問在不懂裝懂時隨口胡說八道。' },
+
+            41: { cat: 'Deployment', title: '雲端部署 (Vercel/Render)', content: '利用現代化的 PaaS 雲端平台將網頁與 API 安全地上線，免去自行管理底層伺服器的麻煩。', analogy: '在全世界最佳的地段租用已經蓋好的標準化店面。' },
+            42: { cat: 'Security', title: '權限控管 (RBAC/RLS)', content: '角色存取控制與資料列層級安全。確保即使是登入員工，也只能撈出屬於自己的報告。', analogy: '即使擁有員工證，也只有領班的卡片能刷開保險箱的門。' },
+            43: { cat: 'Security', title: '金鑰管理 (.env)', content: '絕對不可將 API 金鑰寫在程式碼中。必須透過環境變數動態讀取，避免金鑰外流。', analogy: '保險箱密碼不能寫在送餐單上，而是要另外以暗號傳遞。' },
+            44: { cat: 'Management', title: '規格書 (PRD/Prompt)', content: '請 AI 寫程式前必須定義的藍圖。包含：使用者故事、資料庫綱要、API 規格與例外處理。', analogy: '給工頭的精確施工藍圖，包含管線圖與建材清單。' },
+            45: { cat: 'Core Value', title: '人在迴圈內 (Human in loop)', content: '在 AI 系統中，刻意將「專家的審核與決策」保留在關鍵節點上，確保資安與責任歸屬。', analogy: '機器的初步檢測報告，最後仍需有執照的醫檢師蓋章放行。' }
+        };
+
+        const nodes = new vis.DataSet([
+            { id: 0, label: 'AI 驅動架構師\n(Ultimate Goal)', size: 45, color: { background: 'rgba(0, 243, 255, 0.2)', border: '#00f3ff' }, font: { color: '#ffffff', size: 18, face: 'Orbitron' }, borderWidth: 3 },
+            { id: 99, label: '專有名詞字典\n(Dictionary)', size: 35, color: { background: 'rgba(255, 209, 102, 0.2)', border: '#ffd166' }, font: { color: '#ffffff' }, borderWidth: 2 },
+            { id: 100, label: '實戰避坑\n生存指南', size: 35, color: { background: 'rgba(239, 35, 60, 0.3)', border: '#ef233c' }, font: { color: '#ffffff', size: 16 }, borderWidth: 2 },
+            { id: 101, label: '架構視覺化\n(Mermaid)', size: 35, color: { background: 'rgba(76, 201, 240, 0.3)', border: '#4cc9f0' }, font: { color: '#ffffff', size: 16 }, borderWidth: 2 },
+            { id: 102, label: 'BI戰情儀表板\n(Metabase)', size: 35, color: { background: 'rgba(6, 214, 160, 0.3)', border: '#06d6a0' }, font: { color: '#ffffff', size: 16 }, borderWidth: 2 },
+            
+            { id: 105, label: '第零階起手式\n(裝備與生存)', size: 30, color: { background: 'rgba(255, 159, 28, 0.4)', border: '#ff9f1c' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 106, label: '部署與Notion\n(極速分享)', size: 30, color: { background: 'rgba(239, 71, 111, 0.4)', border: '#ef476f' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 107, label: '核心思維模型\n(新手必讀)', size: 30, color: { background: 'rgba(255, 209, 102, 0.4)', border: '#ffd166' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 108, label: '商業盲點防禦\n(資安與架構)', size: 30, color: { background: 'rgba(217, 4, 41, 0.4)', border: '#d90429' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 109, label: '醫療合規指南\n(FDA/隱私)', size: 30, color: { background: 'rgba(23, 195, 178, 0.4)', border: '#17c3b2' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 110, label: '沙盒專案實戰\n(指令式開發)', size: 30, color: { background: 'rgba(255, 0, 110, 0.4)', border: '#ff006e' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 1, label: '階段一\n(點擊看手冊)', size: 30, color: { background: 'rgba(123, 44, 191, 0.4)', border: '#7b2cbf' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 11, label: '前端外場\n(HTML/Vue)', shape: 'box', color: { background: 'rgba(20, 30, 60, 0.8)', border: '#4cc9f0' }, font: { color: '#e0e0e0' } },
+            { id: 12, label: '代工廚房\n(Supabase)', shape: 'box', color: { background: 'rgba(20, 30, 60, 0.8)', border: '#4cc9f0' }, font: { color: '#e0e0e0' } },
+            { id: 13, label: '解耦觀念\n(Decoupling)', shape: 'box', color: { background: 'rgba(60, 20, 40, 0.8)', border: '#f72585' }, font: { color: '#e0e0e0' } },
+
+            { id: 2, label: '階段二\n(點擊看手冊)', size: 30, color: { background: 'rgba(123, 44, 191, 0.4)', border: '#7b2cbf' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 21, label: '系統化外場\n(React)', shape: 'box', color: { background: 'rgba(20, 30, 60, 0.8)', border: '#4cc9f0' }, font: { color: '#e0e0e0' } },
+            { id: 22, label: '專屬廚房\n(FastAPI)', shape: 'box', color: { background: 'rgba(20, 30, 60, 0.8)', border: '#4cc9f0' }, font: { color: '#e0e0e0' } },
+            { id: 23, label: '關聯式資料庫\n(PostgreSQL)', shape: 'box', color: { background: 'rgba(20, 30, 60, 0.8)', border: '#4cc9f0' }, font: { color: '#e0e0e0' } },
+            { id: 24, label: '組件化\n(Component)', shape: 'box', color: { background: 'rgba(60, 20, 40, 0.8)', border: '#f72585' }, font: { color: '#e0e0e0' } },
+
+            { id: 3, label: '階段三\n(點擊看手冊)', size: 30, color: { background: 'rgba(123, 44, 191, 0.4)', border: '#7b2cbf' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 31, label: '自動化排程\n(n8n)', shape: 'box', color: { background: 'rgba(20, 60, 40, 0.8)', border: '#06d6a0' }, font: { color: '#e0e0e0' } },
+            { id: 32, label: '向量資料庫\n(Vector DB)', shape: 'box', color: { background: 'rgba(20, 60, 40, 0.8)', border: '#06d6a0' }, font: { color: '#e0e0e0' } },
+            { id: 33, label: '專屬知識庫\n(RAG)', shape: 'box', color: { background: 'rgba(60, 40, 20, 0.8)', border: '#ffd166' }, font: { color: '#e0e0e0' } },
+            { id: 34, label: '消滅幻覺\n(Hallucination)', shape: 'box', color: { background: 'rgba(60, 20, 40, 0.8)', border: '#f72585' }, font: { color: '#e0e0e0' } },
+
+            { id: 4, label: '階段四\n(點擊看手冊)', size: 30, color: { background: 'rgba(123, 44, 191, 0.4)', border: '#7b2cbf' }, font: { color: '#ffffff', size:16 }, borderWidth: 2 },
+            { id: 41, label: '雲端部署\n(Vercel/Render)', shape: 'box', color: { background: 'rgba(40, 40, 60, 0.8)', border: '#b5179e' }, font: { color: '#e0e0e0' } },
+            { id: 42, label: '權限控管\n(RLS/RBAC)', shape: 'box', color: { background: 'rgba(40, 40, 60, 0.8)', border: '#b5179e' }, font: { color: '#e0e0e0' } },
+            { id: 43, label: '金鑰管理\n(.env)', shape: 'box', color: { background: 'rgba(40, 40, 60, 0.8)', border: '#b5179e' }, font: { color: '#e0e0e0' } },
+            { id: 44, label: '系統規格書\n(PRD)', shape: 'box', color: { background: 'rgba(60, 40, 20, 0.8)', border: '#ffd166' }, font: { color: '#e0e0e0' } },
+            { id: 45, label: '人在迴圈內\n(Human in loop)', shape: 'box', color: { background: 'rgba(60, 20, 20, 0.8)', border: '#ef233c' }, font: { color: '#e0e0e0' } }
+        ]);
+
+        const edges = new vis.DataSet([
+            { from: 0, to: 99, color: { color: '#ffd166', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 100, color: { color: '#ef233c', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 101, color: { color: '#4cc9f0', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 102, color: { color: '#06d6a0', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 105, color: { color: '#ff9f1c', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 106, color: { color: '#ef476f', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 107, color: { color: '#ffd166', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 108, color: { color: '#d90429', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 109, color: { color: '#17c3b2', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 110, color: { color: '#ff006e', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 1, color: { color: '#7b2cbf', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 2, color: { color: '#7b2cbf', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 3, color: { color: '#7b2cbf', highlight: '#00f3ff' }, width: 2, dashes: true },
+            { from: 0, to: 4, color: { color: '#7b2cbf', highlight: '#00f3ff' }, width: 2, dashes: true },
+            
+            { from: 1, to: 11, color: { color: '#4cc9f0' } }, { from: 1, to: 12, color: { color: '#4cc9f0' } }, { from: 1, to: 13, color: { color: '#f72585' } },
+            { from: 2, to: 21, color: { color: '#4cc9f0' } }, { from: 2, to: 22, color: { color: '#4cc9f0' } }, { from: 2, to: 23, color: { color: '#4cc9f0' } }, { from: 2, to: 24, color: { color: '#f72585' } },
+            { from: 3, to: 31, color: { color: '#06d6a0' } }, { from: 3, to: 32, color: { color: '#06d6a0' } }, { from: 3, to: 33, color: { color: '#ffd166' } }, { from: 3, to: 34, color: { color: '#f72585' } },
+            { from: 4, to: 41, color: { color: '#b5179e' } }, { from: 4, to: 42, color: { color: '#b5179e' } }, { from: 4, to: 43, color: { color: '#b5179e' } }, { from: 4, to: 44, color: { color: '#ffd166' } }, { from: 4, to: 45, color: { color: '#ef233c' } },
+
+            { from: 11, to: 21, arrows: 'to', color: { color: 'rgba(0, 243, 255, 0.4)' }, dashes: true },
+            { from: 12, to: 23, arrows: 'to', color: { color: 'rgba(0, 243, 255, 0.4)' }, dashes: true },
+            { from: 23, to: 32, arrows: 'to', color: { color: 'rgba(0, 243, 255, 0.4)' }, dashes: true },
+            { from: 33, to: 34, arrows: 'to', color: { color: 'rgba(255, 209, 102, 0.6)' } },
+            { from: 31, to: 45, arrows: 'to', color: { color: 'rgba(239, 35, 60, 0.6)' }, dashes: true },
+            { from: 44, to: 0, arrows: 'to', color: { color: 'rgba(255, 209, 102, 0.6)' } }
+        ]);
+
+        const container = document.getElementById('mynetwork');
+        const data = { nodes: nodes, edges: edges };
+        const options = {
+            nodes: { shape: 'dot', font: { face: 'Noto Sans TC' }, shadow: { enabled: true, color: 'rgba(0, 243, 255, 0.3)', size: 15 } },
+            edges: { smooth: { type: 'continuous' }, shadow: { enabled: true, color: 'rgba(0, 243, 255, 0.2)', size: 5 } },
+            physics: { forceAtlas2Based: { gravitationalConstant: -80, centralGravity: 0.005, springLength: 200, springConstant: 0.04 }, maxVelocity: 50, solver: 'forceAtlas2Based', timestep: 0.35, stabilization: { iterations: 150 } },
+            interaction: { hover: true, tooltipDelay: 200, zoomView: true }
+        };
+
+        const network = new vis.Network(container, data, options);
+
+        const sidePanel = document.getElementById('side-panel');
+        const nodeTitle = document.getElementById('node-title');
+        const nodeCategory = document.getElementById('node-category');
+        const nodeContent = document.getElementById('node-content');
+        const nodeAnalogy = document.getElementById('node-analogy');
+        const nodeAnalogyText = document.getElementById('node-analogy-text');
+
+        network.on("selectNode", function (params) {
+            const nodeId = params.nodes[0];
+            const info = knowledgeBase[nodeId];
+            
+            if(info) {
+                nodeTitle.innerText = info.title;
+                nodeCategory.innerText = info.cat;
+                
+                if(info.mdId) {
+                    // 渲染完整的 Markdown 內容
+                    const rawMd = mdData[info.mdId];
+                    nodeContent.innerHTML = marked.parse(rawMd);
+                    sidePanel.style.width = window.innerWidth < 800 ? '90vw' : '55vw'; // 放大面板顯示長文
+                    nodeAnalogy.style.display = 'none';
+                    
+                    // 啟用程式碼高亮
+                    document.querySelectorAll('pre code').forEach((block) => {
+                        hljs.highlightElement(block);
+                    });
+                } else {
+                    // 渲染簡短的 tooltip 內容
+                    nodeContent.innerHTML = `<p>${info.content}</p>`;
+                    sidePanel.style.width = '400px'; // 恢復小面板
+                    if(info.analogy) {
+                        nodeAnalogy.style.display = 'block';
+                        nodeAnalogyText.innerText = info.analogy;
+                    } else {
+                        nodeAnalogy.style.display = 'none';
+                    }
+                }
+                
+                sidePanel.classList.add('open');
+                // 讓內容捲軸回到最頂部
+                sidePanel.scrollTop = 0;
+            }
+        });
+
+        network.on("deselectNode", function () { closePanel(); });
+
+        function closePanel() { sidePanel.classList.remove('open'); }
+
+        // 背景粒子特效
+        const canvas = document.getElementById('particles');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+
+        function initParticles() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            particles = [];
+            for (let i = 0; i < 150; i++) {
+                particles.push({
+                    x: Math.random() * width, y: Math.random() * height, r: Math.random() * 1.5,
+                    dx: (Math.random() - 0.5) * 0.2, dy: (Math.random() - 0.5) * 0.2, opacity: Math.random() * 0.5 + 0.1
+                });
+            }
+        }
+
+        function drawParticles() {
+            ctx.clearRect(0, 0, width, height);
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                ctx.fill();
+                p.x += p.dx; p.y += p.dy;
+                if (p.x < 0) p.x = width; if (p.x > width) p.x = 0;
+                if (p.y < 0) p.y = height; if (p.y > height) p.y = 0;
+            });
+            requestAnimationFrame(drawParticles);
+        }
+
+        window.addEventListener('resize', initParticles);
+        initParticles();
+        drawParticles();
+    </script>
+</body>
+</html>
